@@ -1,4 +1,7 @@
-Below is an updated guide that uses Visual Studio’s UI (instead of CLI commands) to create an empty solution and projects, then build a .NET Web API using SQLite and the IRepository pattern with two implementations (EF Core and raw SQL). At the end, you’ll see a Mermaid diagram summarizing the architecture.
+
+
+# Complete Guide: Building a .NET Web API Using SQLite and the IRepository Pattern  
+*(Using Visual Studio’s UI)*
 
 ---
 
@@ -17,38 +20,47 @@ Below is an updated guide that uses Visual Studio’s UI (instead of CLI command
 
 ### **1. Create the Web API Project (MyWebAPI)**
 
-1. In **Solution Explorer**, right-click the solution and choose **Add > New Project**.
-2. Select the **"ASP.NET Core Web API"** template.
-3. Name the project **MyWebAPI**.
-4. Configure the project (e.g., target .NET 6/7/9) and click **Create**.
-5. If the template uses minimal APIs (top-level statements), you can modify it later to use controllers:
-   - In **Program.cs**, remove any minimal endpoint mappings (like `app.MapGet(...)`) and add:
-     ```csharp
-     builder.Services.AddControllers();
-     // ...
-     app.MapControllers();
-     ```
-   - Add a new folder **Controllers** and create your controller classes there.
+- **Project:** MyWebAPI  
+- **Type:** ASP.NET Core Web API  
+- **Steps:**
+  1. In **Solution Explorer**, right-click the solution and choose **Add > New Project**.
+  2. Select the **"ASP.NET Core Web API"** template.
+  3. Name the project **MyWebAPI**.
+  4. Configure the project (e.g., target .NET 6/7/9) and click **Create**.
+  5. If the template uses minimal APIs (top-level statements), modify it to use controllers:  
+     - In **Program.cs**, remove any minimal endpoint mappings (like `app.MapGet(...)`) and add:
+       ```csharp
+       builder.Services.AddControllers();
+       // ...
+       app.MapControllers();
+       ```
+     - Add a new folder **Controllers** and create your controller classes there.
 
 ### **2. Create the Application Class Library**
 
-1. Right-click the solution and choose **Add > New Project**.
-2. Select the **"Class Library"** template.
-3. Name the project **Application**.
-4. Click **Create**.
+- **Project:** Application  
+- **Type:** Class Library  
+- **Steps:**
+  1. Right-click the solution and choose **Add > New Project**.
+  2. Select the **"Class Library"** template.
+  3. Name the project **Application**.
+  4. Click **Create**.
 
 ### **3. Create the Infrastructure Class Library**
 
-1. Right-click the solution and choose **Add > New Project**.
-2. Select the **"Class Library"** template.
-3. Name the project **Infrastructure**.
-4. Click **Create**.
+- **Project:** Infrastructure  
+- **Type:** Class Library  
+- **Steps:**
+  1. Right-click the solution and choose **Add > New Project**.
+  2. Select the **"Class Library"** template.
+  3. Name the project **Infrastructure**.
+  4. Click **Create**.
 
 ### **4. Set Up Project References**
 
-1. In **Solution Explorer**, right-click the **MyWebAPI** project and choose **Add > Reference...**.
-2. Check both **Application** and **Infrastructure** projects, then click **OK**.
-3. In the **Infrastructure** project, add a reference to **Application** by right-clicking **Infrastructure**, choosing **Add > Reference...**, and selecting **Application**.
+- In **Solution Explorer**, right-click the **MyWebAPI** project and choose **Add > Reference...**.
+- Check both **Application** and **Infrastructure** projects, then click **OK**.
+- In the **Infrastructure** project, add a reference to **Application** by right-clicking **Infrastructure**, choosing **Add > Reference...**, and selecting **Application**.
 
 ---
 
@@ -57,12 +69,17 @@ Below is an updated guide that uses Visual Studio’s UI (instead of CLI command
 Use the **NuGet Package Manager** in Visual Studio:
 
 1. In **Solution Explorer**, right-click the **MyWebAPI** project and choose **Manage NuGet Packages**.
-2. Install the following packages:
+2. Install the following packages into **MyWebAPI**:
    - **Microsoft.EntityFrameworkCore**
    - **Microsoft.EntityFrameworkCore.Sqlite**
    - **Microsoft.EntityFrameworkCore.Design**
    - **Microsoft.EntityFrameworkCore.Tools**
-3. (The raw SQL implementation will use ADO.NET with the **Microsoft.Data.Sqlite** package, which comes with the EF SQLite package.)
+3. **Important for Raw SQL:**  
+   In the **Infrastructure** project (since RepositoryRawSQL is defined there), ensure you install the **Microsoft.Data.Sqlite** package.  
+   *Tip: You can do this via the NuGet Package Manager or the Package Manager Console:*
+   ```powershell
+   Install-Package Microsoft.Data.Sqlite
+   ```
 
 ---
 
@@ -70,8 +87,9 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ### **3.1 Create the Database Context (EF Implementation)**
 
-1. In the **Infrastructure** project, create a new folder called **Data**.
-2. Add a new class named **ApplicationDbContext.cs** with the following code:
+- **Project:** Infrastructure  
+- **Folder:** Create a new folder named **Data**.  
+- **File:** Add a new class named **ApplicationDbContext.cs** with the following code:
 
    ```csharp
    using Microsoft.EntityFrameworkCore;
@@ -100,8 +118,9 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 4: Define the Repository Interface**
 
-1. In the **Application** project, create a new folder called **Interfaces**.
-2. Add a new class named **IRepository.cs** with the following code:
+- **Project:** Application  
+- **Folder:** Create a new folder called **Interfaces**.  
+- **File:** Add a new class named **IRepository.cs** with the following code:
 
    ```csharp
    using System.Collections.Generic;
@@ -124,8 +143,9 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 5: Implement the Entity Framework Repository**
 
-1. In the **Infrastructure** project, create a new folder called **Repositories**.
-2. Add a new class named **RepositoryEF.cs** with the following code:
+- **Project:** Infrastructure  
+- **Folder:** Create a new folder called **Repositories**.  
+- **File:** Add a new class named **RepositoryEF.cs** with the following code:
 
    ```csharp
    using Application.Interfaces;
@@ -184,9 +204,14 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 6: Implement the Raw SQL Repository (No DbContext)**
 
-1. In the **Infrastructure/Repositories** folder, add a new class named **RepositoryRawSQL.cs** with the following code:
+- **Project:** Infrastructure  
+- **Folder:** In the **Repositories** folder, add a new class named **RepositoryRawSQL.cs** with the following code:
 
    ```csharp
+   // Note: This implementation requires the Microsoft.Data.Sqlite NuGet package.
+   // Ensure you install it in the Infrastructure project:
+   // Via Package Manager Console: Install-Package Microsoft.Data.Sqlite
+
    using Application.Interfaces;
    using Microsoft.Data.Sqlite;
    using System;
@@ -211,6 +236,7 @@ Use the **NuGet Package Manager** in Visual Studio:
                return new SqliteConnection(_connectionString);
            }
 
+           // Helper: Convert a DataReader row to a Dictionary<string, object?>
            private Dictionary<string, object?> ReadRow(SqliteDataReader reader)
            {
                var dict = new Dictionary<string, object?>();
@@ -313,14 +339,14 @@ Use the **NuGet Package Manager** in Visual Studio:
    }
    ```
 
-*Note: This implementation assumes table names are the plural of the entity names (e.g., Product → Products).*
+*Note: This file is part of the **Infrastructure** project. The comment at the top reminds you to install the Microsoft.Data.Sqlite NuGet package in the Infrastructure project.*
 
 ---
 
 ## **Step 7: Configure Application Settings**
 
-1. In **MyWebAPI**, open the **appsettings.json** file.
-2. Update it with the following content:
+- **Project:** MyWebAPI  
+- **File:** Open **appsettings.json** and update it with the following content:
 
    ```json
    {
@@ -344,8 +370,8 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 8: Configure Dependency Injection in MyWebAPI**
 
-1. In **MyWebAPI**, open the **Program.cs** file.
-2. Modify it as follows:
+- **Project:** MyWebAPI  
+- **File:** Open **Program.cs** and modify it as follows:
 
    ```csharp
    using Application.Interfaces;
@@ -399,8 +425,9 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 9: Create a Sample Controller**
 
-1. In **MyWebAPI**, create a new folder named **Controllers**.
-2. Add a new controller class called **ProductController.cs** with the following code:
+- **Project:** MyWebAPI  
+- **Folder:** Create a new folder named **Controllers**.  
+- **File:** Add a new controller class called **ProductController.cs** with the following code:
 
    ```csharp
    using Application.Interfaces;
@@ -469,7 +496,7 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 ## **Step 10: Run and Test the API**
 
-1. Press **F5** or click **Start Debugging** in Visual Studio to run the project.
+1. Press **F5** or click **Start Debugging** in Visual Studio to run the project.  
 2. Open your browser and navigate to the URL provided (for example, `https://localhost:5001/swagger`) to test the endpoints.
 
 ---
@@ -484,7 +511,8 @@ Use the **NuGet Package Manager** in Visual Studio:
 
 - **Data Access Implementations:**  
   - **RepositoryEF:** Uses EF Core with a DbContext.
-  - **RepositoryRawSQL:** Uses pure ADO.NET with SQLite (no DbContext).
+  - **RepositoryRawSQL:** Uses pure ADO.NET with SQLite (no DbContext).  
+    *Note: RepositoryRawSQL requires the Microsoft.Data.Sqlite NuGet package, which must be added to the Infrastructure project.*
 
 - **Configuration Toggle:**  
   In **appsettings.json**, `"UseRawSQL"` determines which repository implementation is used.
@@ -495,8 +523,6 @@ Use the **NuGet Package Manager** in Visual Studio:
 ---
 
 ## **Architecture Overview (Mermaid Diagram)**
-
-Below is a Mermaid diagram summarizing the project/class-level dependencies and associations, with a note that MyWebAPI calls Infrastructure based on configuration:
 
 ```mermaid
 classDiagram
@@ -555,4 +581,4 @@ classDiagram
   - **RepositoryRawSQL:** Uses raw SQL (ADO.NET).  
   Both are aggregated within Infrastructure and implement the interface defined in Application.
 
-This diagram and guide together provide a clear overview of how the solution is structured using Visual Studio, without CLI commands, and how configuration determines the concrete repository implementation.
+This guide and diagram together provide a clear, Visual Studio–based approach to building a .NET Web API using SQLite and the IRepository pattern with two implementations.
