@@ -1,41 +1,45 @@
+using Application.Interfaces;
+using Infrastructure.Data;
+using Infrastructure.Repositories;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Retrieve connection string and flag from configuration
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+bool useRawSQL = builder.Configuration.GetValue<bool>("UseRawSQL");
+
+if (!useRawSQL)
+{
+    // Register EF DbContext when not using raw SQL
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(connectionString));
+}
+
+// Register repository based on configuration flag
+if (useRawSQL)
+{
+    // For raw SQL, register RepositoryRawSQL as an open generic type.
+    // Its constructor will receive IConfiguration automatically.
+    builder.Services.AddScoped(typeof(IRepository<>), typeof(RepositoryRawSQL<>));
+}
+else
+{
+    builder.Services.AddScoped(typeof(IRepository<>), typeof(RepositoryEF<>));
+}
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(); // Swashbuckle.AspNetCore enables AddSwaggerGen()
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
+app.UseAuthorization();
+app.MapControllers();
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
