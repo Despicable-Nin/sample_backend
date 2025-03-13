@@ -530,4 +530,49 @@ namespace MyWebAPI.Controllers
 - **Configuration Toggle:**  
   Set `"UseRawSQL"` in `appsettings.json` to choose which implementation is used.
 
-This guide now provides a complete walkthrough—from creating an empty solution to building a fully functional .NET Web API with both repository implementations. Happy coding!
+```mermaid
+
+classDiagram
+    direction TB
+
+    class MyWebAPI {
+        +Uses Repository Interface
+    }
+    
+    class Application {
+        +Defines Repository Interface (IRepository)
+    }
+    
+    class Infrastructure {
+        +Provides Implementations
+    }
+    
+    class RepositoryEF {
+        +GetAllAsync()
+        +GetByIdAsync(id)
+        +AddAsync(entity)
+        +UpdateAsync(entity)
+        +DeleteAsync(id)
+    }
+    
+    class RepositoryRawSQL {
+        +GetAllAsync()
+        +GetByIdAsync(id)
+        +AddAsync(entity)
+        +UpdateAsync(entity)
+        +DeleteAsync(id)
+    }
+    
+    %% Relationships
+    MyWebAPI --> Application : Uses (Dependency)
+    MyWebAPI --> Infrastructure : "Based on configuration" (Dependency)
+    
+    Infrastructure *-- RepositoryEF : Aggregation
+    Infrastructure *-- RepositoryRawSQL : Aggregation
+    
+    RepositoryEF ..|> Application : Implements IRepository (defined in Application)
+    RepositoryRawSQL ..|> Application : Implements IRepository (defined in Application)
+
+
+
+```
