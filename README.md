@@ -1,537 +1,504 @@
-Below is a complete, step‐by‐step guide to create an empty solution, then build a .NET Web API using SQLite and the IRepository pattern—with two implementations: one using Entity Framework Core (EF) and one using raw SQL (using ADO.NET without DbContext). You can toggle between them with a configuration flag.
+Below is an updated guide that uses Visual Studio’s UI (instead of CLI commands) to create an empty solution and projects, then build a .NET Web API using SQLite and the IRepository pattern with two implementations (EF Core and raw SQL). At the end, you’ll see a Mermaid diagram summarizing the architecture.
 
 ---
 
-## **Step 0: Create an Empty Solution**
+## **Step 0: Create an Empty Solution in Visual Studio**
 
-1. Open a terminal in your working folder.
-2. Create an empty solution:
-   ```sh
-   dotnet new sln -n MySolution
+1. **Open Visual Studio** (2022 or later).  
+2. **Create a new project**:  
+   - Go to **File > New > Project**.  
+   - Select the **"Blank Solution"** template.  
+   - Name the solution **MySolution** and choose your location.  
+3. Click **Create**.
+
+---
+
+## **Step 1: Create the Projects**
+
+### **1. Create the Web API Project (MyWebAPI)**
+
+1. In **Solution Explorer**, right-click the solution and choose **Add > New Project**.
+2. Select the **"ASP.NET Core Web API"** template.
+3. Name the project **MyWebAPI**.
+4. Configure the project (e.g., target .NET 6/7/9) and click **Create**.
+5. If the template uses minimal APIs (top-level statements), you can modify it later to use controllers:
+   - In **Program.cs**, remove any minimal endpoint mappings (like `app.MapGet(...)`) and add:
+     ```csharp
+     builder.Services.AddControllers();
+     // ...
+     app.MapControllers();
+     ```
+   - Add a new folder **Controllers** and create your controller classes there.
+
+### **2. Create the Application Class Library**
+
+1. Right-click the solution and choose **Add > New Project**.
+2. Select the **"Class Library"** template.
+3. Name the project **Application**.
+4. Click **Create**.
+
+### **3. Create the Infrastructure Class Library**
+
+1. Right-click the solution and choose **Add > New Project**.
+2. Select the **"Class Library"** template.
+3. Name the project **Infrastructure**.
+4. Click **Create**.
+
+### **4. Set Up Project References**
+
+1. In **Solution Explorer**, right-click the **MyWebAPI** project and choose **Add > Reference...**.
+2. Check both **Application** and **Infrastructure** projects, then click **OK**.
+3. In the **Infrastructure** project, add a reference to **Application** by right-clicking **Infrastructure**, choosing **Add > Reference...**, and selecting **Application**.
+
+---
+
+## **Step 2: Install Required NuGet Packages**
+
+Use the **NuGet Package Manager** in Visual Studio:
+
+1. In **Solution Explorer**, right-click the **MyWebAPI** project and choose **Manage NuGet Packages**.
+2. Install the following packages:
+   - **Microsoft.EntityFrameworkCore**
+   - **Microsoft.EntityFrameworkCore.Sqlite**
+   - **Microsoft.EntityFrameworkCore.Design**
+   - **Microsoft.EntityFrameworkCore.Tools**
+3. (The raw SQL implementation will use ADO.NET with the **Microsoft.Data.Sqlite** package, which comes with the EF SQLite package.)
+
+---
+
+## **Step 3: Configure SQLite**
+
+### **3.1 Create the Database Context (EF Implementation)**
+
+1. In the **Infrastructure** project, create a new folder called **Data**.
+2. Add a new class named **ApplicationDbContext.cs** with the following code:
+
+   ```csharp
+   using Microsoft.EntityFrameworkCore;
+
+   namespace Infrastructure.Data
+   {
+       public class ApplicationDbContext : DbContext
+       {
+           public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+               : base(options) { }
+
+           public DbSet<Product> Products { get; set; }
+       }
+
+       // A simple Product entity
+       public class Product
+       {
+           public int Id { get; set; }
+           public string Name { get; set; } = string.Empty;
+           public decimal Price { get; set; }
+       }
+   }
    ```
 
 ---
 
-## **Step 1: Install Prerequisites**
+## **Step 4: Define the Repository Interface**
 
-1. **.NET SDK**  
-   Download and install the latest .NET SDK (e.g., .NET 9) from [Microsoft .NET](https://dotnet.microsoft.com/download/dotnet).  
-   Verify installation:
-   ```sh
-   dotnet --version
-   ```
+1. In the **Application** project, create a new folder called **Interfaces**.
+2. Add a new class named **IRepository.cs** with the following code:
 
-2. **Visual Studio Code**  
-   Download and install [VS Code](https://code.visualstudio.com/).
+   ```csharp
+   using System.Collections.Generic;
+   using System.Threading.Tasks;
 
-3. **C# Extension**  
-   In VS Code, open Extensions (`Ctrl+Shift+X`), search for **"C#"**, and install the official extension.
-
-4. **Entity Framework Core CLI**  
-   Install the EF Core CLI tools:
-   ```sh
-   dotnet tool install --global dotnet-ef
-   ```
-   Verify with:
-   ```sh
-   dotnet ef --version
+   namespace Application.Interfaces
+   {
+       public interface IRepository<T> where T : class
+       {
+           Task<IEnumerable<T>> GetAllAsync();
+           Task<T?> GetByIdAsync(int id);
+           Task AddAsync(T entity);
+           Task UpdateAsync(T entity);
+           Task DeleteAsync(int id);
+       }
+   }
    ```
 
 ---
 
-## **Step 2: Create Projects and Set Up the Architecture**
+## **Step 5: Implement the Entity Framework Repository**
 
-We’ll create three projects:
-- **MyWebAPI** (API layer)
-- **Application** (Business logic and interfaces)
-- **Infrastructure** (Data access with two repository implementations)
+1. In the **Infrastructure** project, create a new folder called **Repositories**.
+2. Add a new class named **RepositoryEF.cs** with the following code:
 
-Run the following commands from the solution folder:
+   ```csharp
+   using Application.Interfaces;
+   using Infrastructure.Data;
+   using Microsoft.EntityFrameworkCore;
 
-1. **Create the Web API Project:**
-   ```sh
-   dotnet new webapi -n MyWebAPI
+   namespace Infrastructure.Repositories
+   {
+       public class RepositoryEF<T> : IRepository<T> where T : class
+       {
+           private readonly ApplicationDbContext _context;
+           private readonly DbSet<T> _dbSet;
+
+           public RepositoryEF(ApplicationDbContext context)
+           {
+               _context = context;
+               _dbSet = _context.Set<T>();
+           }
+
+           public async Task<IEnumerable<T>> GetAllAsync()
+           {
+               return await _dbSet.ToListAsync();
+           }
+
+           public async Task<T?> GetByIdAsync(int id)
+           {
+               return await _dbSet.FindAsync(id);
+           }
+
+           public async Task AddAsync(T entity)
+           {
+               await _dbSet.AddAsync(entity);
+               await _context.SaveChangesAsync();
+           }
+
+           public async Task UpdateAsync(T entity)
+           {
+               _dbSet.Update(entity);
+               await _context.SaveChangesAsync();
+           }
+
+           public async Task DeleteAsync(int id)
+           {
+               var entity = await _dbSet.FindAsync(id);
+               if (entity != null)
+               {
+                   _dbSet.Remove(entity);
+                   await _context.SaveChangesAsync();
+               }
+           }
+       }
+   }
    ```
 
-2. **Create the Application Class Library:**
-   ```sh
-   dotnet new classlib -n Application
+---
+
+## **Step 6: Implement the Raw SQL Repository (No DbContext)**
+
+1. In the **Infrastructure/Repositories** folder, add a new class named **RepositoryRawSQL.cs** with the following code:
+
+   ```csharp
+   using Application.Interfaces;
+   using Microsoft.Data.Sqlite;
+   using System;
+   using System.Collections.Generic;
+   using System.Linq;
+   using System.Text.Json;
+   using System.Threading.Tasks;
+
+   namespace Infrastructure.Repositories
+   {
+       public class RepositoryRawSQL<T> : IRepository<T> where T : class
+       {
+           private readonly string _connectionString;
+
+           public RepositoryRawSQL(string connectionString)
+           {
+               _connectionString = connectionString;
+           }
+
+           private SqliteConnection GetConnection()
+           {
+               return new SqliteConnection(_connectionString);
+           }
+
+           private Dictionary<string, object?> ReadRow(SqliteDataReader reader)
+           {
+               var dict = new Dictionary<string, object?>();
+               for (int i = 0; i < reader.FieldCount; i++)
+               {
+                   dict[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+               }
+               return dict;
+           }
+
+           public async Task<IEnumerable<T>> GetAllAsync()
+           {
+               var result = new List<T>();
+               using var connection = GetConnection();
+               await connection.OpenAsync();
+               var tableName = typeof(T).Name + "s"; // basic pluralization
+               var command = new SqliteCommand($"SELECT * FROM {tableName}", connection);
+               using var reader = await command.ExecuteReaderAsync();
+               while (await reader.ReadAsync())
+               {
+                   var rowDict = ReadRow(reader);
+                   var json = JsonSerializer.Serialize(rowDict);
+                   var entity = JsonSerializer.Deserialize<T>(json);
+                   if (entity != null)
+                       result.Add(entity);
+               }
+               return result;
+           }
+
+           public async Task<T?> GetByIdAsync(int id)
+           {
+               using var connection = GetConnection();
+               await connection.OpenAsync();
+               var tableName = typeof(T).Name + "s";
+               var command = new SqliteCommand($"SELECT * FROM {tableName} WHERE Id = @id", connection);
+               command.Parameters.AddWithValue("@id", id);
+               using var reader = await command.ExecuteReaderAsync();
+               if (await reader.ReadAsync())
+               {
+                   var rowDict = ReadRow(reader);
+                   var json = JsonSerializer.Serialize(rowDict);
+                   return JsonSerializer.Deserialize<T>(json);
+               }
+               return null;
+           }
+
+           public async Task AddAsync(T entity)
+           {
+               using var connection = GetConnection();
+               await connection.OpenAsync();
+               var tableName = typeof(T).Name + "s";
+
+               var props = typeof(T).GetProperties().Where(p => p.Name != "Id").ToList();
+               var columns = string.Join(", ", props.Select(p => p.Name));
+               var parameters = string.Join(", ", props.Select(p => "@" + p.Name));
+
+               var command = new SqliteCommand($"INSERT INTO {tableName} ({columns}) VALUES ({parameters})", connection);
+               foreach (var prop in props)
+               {
+                   command.Parameters.AddWithValue("@" + prop.Name, prop.GetValue(entity) ?? DBNull.Value);
+               }
+               await command.ExecuteNonQueryAsync();
+           }
+
+           public async Task UpdateAsync(T entity)
+           {
+               using var connection = GetConnection();
+               await connection.OpenAsync();
+               var tableName = typeof(T).Name + "s";
+               var idProp = typeof(T).GetProperty("Id");
+               if (idProp == null)
+                   throw new Exception("Entity must have an Id property.");
+
+               var idValue = idProp.GetValue(entity);
+               if (idValue == null)
+                   throw new Exception("Id value cannot be null.");
+
+               var props = typeof(T).GetProperties().Where(p => p.Name != "Id").ToList();
+               var setClause = string.Join(", ", props.Select(p => $"{p.Name} = @{p.Name}"));
+
+               var command = new SqliteCommand($"UPDATE {tableName} SET {setClause} WHERE Id = @Id", connection);
+               command.Parameters.AddWithValue("@Id", idValue);
+               foreach (var prop in props)
+               {
+                   command.Parameters.AddWithValue("@" + prop.Name, prop.GetValue(entity) ?? DBNull.Value);
+               }
+               await command.ExecuteNonQueryAsync();
+           }
+
+           public async Task DeleteAsync(int id)
+           {
+               using var connection = GetConnection();
+               await connection.OpenAsync();
+               var tableName = typeof(T).Name + "s";
+               var command = new SqliteCommand($"DELETE FROM {tableName} WHERE Id = @id", connection);
+               command.Parameters.AddWithValue("@id", id);
+               await command.ExecuteNonQueryAsync();
+           }
+       }
+   }
    ```
 
-3. **Create the Infrastructure Class Library:**
-   ```sh
-   dotnet new classlib -n Infrastructure
+*Note: This implementation assumes table names are the plural of the entity names (e.g., Product → Products).*
+
+---
+
+## **Step 7: Configure Application Settings**
+
+1. In **MyWebAPI**, open the **appsettings.json** file.
+2. Update it with the following content:
+
+   ```json
+   {
+     "ConnectionStrings": {
+       "DefaultConnection": "Data Source=mydatabase.db"
+     },
+     "UseRawSQL": true,
+     "Logging": {
+       "LogLevel": {
+         "Default": "Information",
+         "Microsoft.AspNetCore": "Warning"
+       }
+     },
+     "AllowedHosts": "*"
+   }
    ```
 
-4. **Add Projects to the Solution:**
-   ```sh
-   dotnet sln MySolution.sln add MyWebAPI/MyWebAPI.csproj
-   dotnet sln MySolution.sln add Application/Application.csproj
-   dotnet sln MySolution.sln add Infrastructure/Infrastructure.csproj
+*Set `"UseRawSQL"` to `true` for the raw SQL implementation, or `false` to use the EF Core implementation.*
+
+---
+
+## **Step 8: Configure Dependency Injection in MyWebAPI**
+
+1. In **MyWebAPI**, open the **Program.cs** file.
+2. Modify it as follows:
+
+   ```csharp
+   using Application.Interfaces;
+   using Infrastructure.Data;
+   using Infrastructure.Repositories;
+   using Microsoft.EntityFrameworkCore;
+
+   var builder = WebApplication.CreateBuilder(args);
+
+   // Retrieve connection string and flag from configuration
+   var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+   bool useRawSQL = builder.Configuration.GetValue<bool>("UseRawSQL");
+
+   if (!useRawSQL)
+   {
+       // Register EF DbContext when not using raw SQL
+       builder.Services.AddDbContext<ApplicationDbContext>(options =>
+           options.UseSqlite(connectionString));
+   }
+
+   // Register repository based on configuration flag
+   if (useRawSQL)
+   {
+       // For raw SQL, pass the connection string directly
+       builder.Services.AddScoped(typeof(IRepository<>), provider =>
+           new RepositoryRawSQL<>(connectionString));
+   }
+   else
+   {
+       builder.Services.AddScoped(typeof(IRepository<>), typeof(RepositoryEF<>));
+   }
+
+   builder.Services.AddControllers();
+   builder.Services.AddEndpointsApiExplorer();
+   builder.Services.AddSwaggerGen();
+
+   var app = builder.Build();
+
+   if (app.Environment.IsDevelopment())
+   {
+       app.UseSwagger();
+       app.UseSwaggerUI();
+   }
+
+   app.UseAuthorization();
+   app.MapControllers();
+   app.Run();
    ```
 
-5. **Add Project References (API depends on both Application & Infrastructure):**
-   ```sh
-   dotnet add MyWebAPI/MyWebAPI.csproj reference Application/Application.csproj
-   dotnet add MyWebAPI/MyWebAPI.csproj reference Infrastructure/Infrastructure.csproj
+---
+
+## **Step 9: Create a Sample Controller**
+
+1. In **MyWebAPI**, create a new folder named **Controllers**.
+2. Add a new controller class called **ProductController.cs** with the following code:
+
+   ```csharp
+   using Application.Interfaces;
+   using Infrastructure.Data; // Only to access the Product model
+   using Microsoft.AspNetCore.Mvc;
+
+   namespace MyWebAPI.Controllers
+   {
+       [Route("api/[controller]")]
+       [ApiController]
+       public class ProductController : ControllerBase
+       {
+           private readonly IRepository<Product> _repository;
+
+           public ProductController(IRepository<Product> repository)
+           {
+               _repository = repository;
+           }
+
+           [HttpGet]
+           public async Task<IActionResult> GetAll()
+           {
+               var products = await _repository.GetAllAsync();
+               return Ok(products);
+           }
+
+           [HttpGet("{id}")]
+           public async Task<IActionResult> GetById(int id)
+           {
+               var product = await _repository.GetByIdAsync(id);
+               if (product == null)
+                   return NotFound();
+               return Ok(product);
+           }
+
+           [HttpPost]
+           public async Task<IActionResult> Create(Product product)
+           {
+               await _repository.AddAsync(product);
+               return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
+           }
+
+           [HttpPut("{id}")]
+           public async Task<IActionResult> Update(int id, Product product)
+           {
+               if (id != product.Id)
+                   return BadRequest("Mismatched product ID.");
+               await _repository.UpdateAsync(product);
+               return NoContent();
+           }
+
+           [HttpDelete("{id}")]
+           public async Task<IActionResult> Delete(int id)
+           {
+               var existing = await _repository.GetByIdAsync(id);
+               if (existing == null)
+                   return NotFound();
+               await _repository.DeleteAsync(id);
+               return NoContent();
+           }
+       }
+   }
    ```
 
-Your folder structure should now resemble:
-```
-MySolution.sln
-├── MyWebAPI/          (API project)
-├── Application/       (Business logic & interfaces)
-└── Infrastructure/    (Data access)
-```
-
-Open the solution in VS Code:
-```sh
-code .
-```
-
 ---
 
-## **Step 3: Install Required NuGet Packages**
+## **Step 10: Run and Test the API**
 
-In the **MyWebAPI** project, add the following packages:
-
-```sh
-dotnet add MyWebAPI package Microsoft.EntityFrameworkCore
-dotnet add MyWebAPI package Microsoft.EntityFrameworkCore.Sqlite
-dotnet add MyWebAPI package Microsoft.EntityFrameworkCore.Design
-dotnet add MyWebAPI package Microsoft.EntityFrameworkCore.Tools
-```
-
-For raw SQL access, we’ll use ADO.NET with the `Microsoft.Data.Sqlite` package (installed as part of the EF SQLite package).
-
----
-
-## **Step 4: Configure SQLite**
-
-### **4.1 Create the Database Context (for EF Implementation)**
-Inside the **Infrastructure** project, create a folder named `Data` and add `ApplicationDbContext.cs`:
-
-```csharp
-// Infrastructure/Data/ApplicationDbContext.cs
-using Microsoft.EntityFrameworkCore;
-
-namespace Infrastructure.Data
-{
-    public class ApplicationDbContext : DbContext
-    {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-            : base(options) { }
-
-        public DbSet<Product> Products { get; set; }
-    }
-
-    // A simple Product entity
-    public class Product
-    {
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public decimal Price { get; set; }
-    }
-}
-```
-
----
-
-## **Step 5: Define the IRepository Interface**
-
-Inside the **Application** project, create a folder called `Interfaces` and add `IRepository.cs`:
-
-```csharp
-// Application/Interfaces/IRepository.cs
-using System.Collections.Generic;
-using System.Threading.Tasks;
-
-namespace Application.Interfaces
-{
-    public interface IRepository<T> where T : class
-    {
-        Task<IEnumerable<T>> GetAllAsync();
-        Task<T?> GetByIdAsync(int id);
-        Task AddAsync(T entity);
-        Task UpdateAsync(T entity);
-        Task DeleteAsync(int id);
-    }
-}
-```
-
----
-
-## **Step 6: Implement the Entity Framework Repository**
-
-Inside the **Infrastructure** project, create a folder named `Repositories` and add `RepositoryEF.cs`:
-
-```csharp
-// Infrastructure/Repositories/RepositoryEF.cs
-using Application.Interfaces;
-using Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
-
-namespace Infrastructure.Repositories
-{
-    public class RepositoryEF<T> : IRepository<T> where T : class
-    {
-        private readonly ApplicationDbContext _context;
-        private readonly DbSet<T> _dbSet;
-
-        public RepositoryEF(ApplicationDbContext context)
-        {
-            _context = context;
-            _dbSet = _context.Set<T>();
-        }
-
-        public async Task<IEnumerable<T>> GetAllAsync()
-        {
-            return await _dbSet.ToListAsync();
-        }
-
-        public async Task<T?> GetByIdAsync(int id)
-        {
-            return await _dbSet.FindAsync(id);
-        }
-
-        public async Task AddAsync(T entity)
-        {
-            await _dbSet.AddAsync(entity);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task UpdateAsync(T entity)
-        {
-            _dbSet.Update(entity);
-            await _context.SaveChangesAsync();
-        }
-
-        public async Task DeleteAsync(int id)
-        {
-            var entity = await _dbSet.FindAsync(id);
-            if (entity != null)
-            {
-                _dbSet.Remove(entity);
-                await _context.SaveChangesAsync();
-            }
-        }
-    }
-}
-```
-
----
-
-## **Step 7: Implement the Raw SQL Repository (No DbContext)**
-
-Inside **Infrastructure/Repositories**, add `RepositoryRawSQL.cs`. This version uses ADO.NET directly with SQLite, without any dependency on DbContext.
-
-```csharp
-// Infrastructure/Repositories/RepositoryRawSQL.cs
-using Application.Interfaces;
-using Microsoft.Data.Sqlite;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using System.Text.Json;
-using System.Linq;
-
-namespace Infrastructure.Repositories
-{
-    public class RepositoryRawSQL<T> : IRepository<T> where T : class
-    {
-        private readonly string _connectionString;
-
-        public RepositoryRawSQL(string connectionString)
-        {
-            _connectionString = connectionString;
-        }
-
-        private SqliteConnection GetConnection()
-        {
-            return new SqliteConnection(_connectionString);
-        }
-
-        // Helper: Convert a DataReader row to a Dictionary<string, object?>
-        private Dictionary<string, object?> ReadRow(SqliteDataReader reader)
-        {
-            var dict = new Dictionary<string, object?>();
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                dict[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            }
-            return dict;
-        }
-
-        public async Task<IEnumerable<T>> GetAllAsync()
-        {
-            var result = new List<T>();
-            using var connection = GetConnection();
-            await connection.OpenAsync();
-            var tableName = typeof(T).Name + "s"; // basic pluralization
-            var command = new SqliteCommand($"SELECT * FROM {tableName}", connection);
-            using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var rowDict = ReadRow(reader);
-                var json = JsonSerializer.Serialize(rowDict);
-                var entity = JsonSerializer.Deserialize<T>(json);
-                if (entity != null)
-                    result.Add(entity);
-            }
-            return result;
-        }
-
-        public async Task<T?> GetByIdAsync(int id)
-        {
-            using var connection = GetConnection();
-            await connection.OpenAsync();
-            var tableName = typeof(T).Name + "s";
-            var command = new SqliteCommand($"SELECT * FROM {tableName} WHERE Id = @id", connection);
-            command.Parameters.AddWithValue("@id", id);
-            using var reader = await command.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                var rowDict = ReadRow(reader);
-                var json = JsonSerializer.Serialize(rowDict);
-                return JsonSerializer.Deserialize<T>(json);
-            }
-            return null;
-        }
-
-        public async Task AddAsync(T entity)
-        {
-            using var connection = GetConnection();
-            await connection.OpenAsync();
-            var tableName = typeof(T).Name + "s";
-
-            // Exclude Id assuming it's auto-generated.
-            var props = typeof(T).GetProperties().Where(p => p.Name != "Id").ToList();
-            var columns = string.Join(", ", props.Select(p => p.Name));
-            var parameters = string.Join(", ", props.Select(p => "@" + p.Name));
-
-            var command = new SqliteCommand($"INSERT INTO {tableName} ({columns}) VALUES ({parameters})", connection);
-            foreach (var prop in props)
-            {
-                command.Parameters.AddWithValue("@" + prop.Name, prop.GetValue(entity) ?? DBNull.Value);
-            }
-            await command.ExecuteNonQueryAsync();
-        }
-
-        public async Task UpdateAsync(T entity)
-        {
-            using var connection = GetConnection();
-            await connection.OpenAsync();
-            var tableName = typeof(T).Name + "s";
-            var idProp = typeof(T).GetProperty("Id");
-            if (idProp == null)
-                throw new Exception("Entity must have an Id property.");
-
-            var idValue = idProp.GetValue(entity);
-            if (idValue == null)
-                throw new Exception("Id value cannot be null.");
-
-            // Exclude Id in the set clause.
-            var props = typeof(T).GetProperties().Where(p => p.Name != "Id").ToList();
-            var setClause = string.Join(", ", props.Select(p => $"{p.Name} = @{p.Name}"));
-
-            var command = new SqliteCommand($"UPDATE {tableName} SET {setClause} WHERE Id = @Id", connection);
-            command.Parameters.AddWithValue("@Id", idValue);
-            foreach (var prop in props)
-            {
-                command.Parameters.AddWithValue("@" + prop.Name, prop.GetValue(entity) ?? DBNull.Value);
-            }
-            await command.ExecuteNonQueryAsync();
-        }
-
-        public async Task DeleteAsync(int id)
-        {
-            using var connection = GetConnection();
-            await connection.OpenAsync();
-            var tableName = typeof(T).Name + "s";
-            var command = new SqliteCommand($"DELETE FROM {tableName} WHERE Id = @id", connection);
-            command.Parameters.AddWithValue("@id", id);
-            await command.ExecuteNonQueryAsync();
-        }
-    }
-}
-```
-
-> **Note:** This basic implementation assumes the table name is a plural form of the class name (e.g., `Product` → `Products`). For a production app, consider a more robust mapping strategy.
-
----
-
-## **Step 8: Configure Application Settings**
-
-In the **MyWebAPI** project, update the `appsettings.json` file:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Data Source=mydatabase.db"
-  },
-  "UseRawSQL": true,
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-  "AllowedHosts": "*"
-}
-```
-
-Set `"UseRawSQL"` to `true` to use the raw SQL implementation or to `false` to use the EF implementation.
-
----
-
-## **Step 9: Configure Dependency Injection in Program.cs**
-
-Edit the `Program.cs` file in **MyWebAPI** as follows:
-
-```csharp
-using Application.Interfaces;
-using Infrastructure.Data;
-using Infrastructure.Repositories;
-using Microsoft.EntityFrameworkCore;
-
-var builder = WebApplication.CreateBuilder(args);
-
-// Retrieve the connection string and the flag from configuration
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-bool useRawSQL = builder.Configuration.GetValue<bool>("UseRawSQL");
-
-if (!useRawSQL)
-{
-    // Register EF DbContext when not using raw SQL
-    builder.Services.AddDbContext<ApplicationDbContext>(options =>
-        options.UseSqlite(connectionString));
-}
-
-// Register the repository based on the configuration flag
-if (useRawSQL)
-{
-    // For raw SQL, pass the connection string directly
-    builder.Services.AddScoped(typeof(IRepository<>), provider =>
-        new RepositoryRawSQL<>(connectionString));
-}
-else
-{
-    builder.Services.AddScoped(typeof(IRepository<>), typeof(RepositoryEF<>));
-}
-
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-app.UseAuthorization();
-app.MapControllers();
-app.Run();
-```
-
----
-
-## **Step 10: Create a Sample Controller**
-
-Inside **MyWebAPI/Controllers**, create a file named `ProductController.cs`:
-
-```csharp
-// MyWebAPI/Controllers/ProductController.cs
-using Application.Interfaces;
-using Infrastructure.Data;
-using Microsoft.AspNetCore.Mvc;
-
-namespace MyWebAPI.Controllers
-{
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ProductController : ControllerBase
-    {
-        private readonly IRepository<Product> _repository;
-
-        public ProductController(IRepository<Product> repository)
-        {
-            _repository = repository;
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
-        {
-            var products = await _repository.GetAllAsync();
-            return Ok(products);
-        }
-
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            var product = await _repository.GetByIdAsync(id);
-            if (product == null) return NotFound();
-            return Ok(product);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create(Product product)
-        {
-            await _repository.AddAsync(product);
-            return CreatedAtAction(nameof(GetById), new { id = product.Id }, product);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, Product product)
-        {
-            if (id != product.Id)
-                return BadRequest("Mismatched product ID.");
-            await _repository.UpdateAsync(product);
-            return NoContent();
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var existing = await _repository.GetByIdAsync(id);
-            if (existing == null)
-                return NotFound();
-            await _repository.DeleteAsync(id);
-            return NoContent();
-        }
-    }
-}
-```
-
----
-
-## **Step 11: Run and Test the API**
-
-1. From the terminal in the solution folder, run:
-   ```sh
-   dotnet run --project MyWebAPI
-   ```
-
-2. Open your browser to [https://localhost:5001/swagger](https://localhost:5001/swagger) (or the URL shown in your console) to test the endpoints.
+1. Press **F5** or click **Start Debugging** in Visual Studio to run the project.
+2. Open your browser and navigate to the URL provided (for example, `https://localhost:5001/swagger`) to test the endpoints.
 
 ---
 
 ## **Summary**
 
 - **Solution Setup:**  
-  Start with an empty solution, then add three projects for API, application logic, and infrastructure.
-  
+  You created an empty solution in Visual Studio and added three projects:
+  - **MyWebAPI:** The API layer.
+  - **Application:** Contains business logic and interfaces.
+  - **Infrastructure:** Contains data access implementations (RepositoryEF and RepositoryRawSQL).
+
 - **Data Access Implementations:**  
-  - **RepositoryEF:** Uses EF Core with a DbContext.  
-  - **RepositoryRawSQL:** Uses pure ADO.NET with SQLite and no DbContext.
-  
+  - **RepositoryEF:** Uses EF Core with a DbContext.
+  - **RepositoryRawSQL:** Uses pure ADO.NET with SQLite (no DbContext).
+
 - **Configuration Toggle:**  
-  Set `"UseRawSQL"` in `appsettings.json` to choose which implementation is used.
+  In **appsettings.json**, `"UseRawSQL"` determines which repository implementation is used.
+
+- **Dependency Injection:**  
+  MyWebAPI registers dependencies based on configuration, and controllers use the repository interface defined in the Application layer.
+
+---
+
+## **Architecture Overview (Mermaid Diagram)**
+
+Below is a Mermaid diagram summarizing the project/class-level dependencies and associations, with a note that MyWebAPI calls Infrastructure based on configuration:
 
 ```mermaid
-
 classDiagram
     direction TB
 
@@ -572,7 +539,20 @@ classDiagram
     
     RepositoryEF ..|> Application : Implements IRepository (defined in Application)
     RepositoryRawSQL ..|> Application : Implements IRepository (defined in Application)
-
-
-
 ```
+
+### **Diagram Explanation:**
+
+- **MyWebAPI (Presentation Layer):**  
+  Uses the repository interface defined in **Application** and calls into **Infrastructure** based on configuration.
+
+- **Application (Business Layer):**  
+  Defines the repository interface (IRepository) that both repository implementations follow.
+
+- **Infrastructure (Data Access Layer):**  
+  Provides two implementations:
+  - **RepositoryEF:** Uses EF Core/SQLite.
+  - **RepositoryRawSQL:** Uses raw SQL (ADO.NET).  
+  Both are aggregated within Infrastructure and implement the interface defined in Application.
+
+This diagram and guide together provide a clear overview of how the solution is structured using Visual Studio, without CLI commands, and how configuration determines the concrete repository implementation.
