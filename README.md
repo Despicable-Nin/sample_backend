@@ -1,4 +1,4 @@
-Below is an updated complete guide (targeting .NET 9) that uses SQL Server. In this guide, we use a Docker image for SQL Server and update the repository implementations to work with SQL Server (using EF Core with SQL Server and a raw SQL version using ADO.NET with Microsoft.Data.SqlClient). The guide also shows how to install Swagger via Swashbuckle and how the repository is used in a sample controller.
+Below is a complete guide (targeting .NET 9) that uses SQL Server. In this guide, we use a Docker image for SQL Server and update the repository implementations to work with SQL Server (using EF Core with SQL Server and a raw SQL version using ADO.NET with Microsoft.Data.SqlClient). The guide also shows how to install Swagger via Swashbuckle and how the repository is used in a sample controller.
 
 ---
 
