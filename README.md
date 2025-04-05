@@ -7,7 +7,7 @@ Below is a complete guide (targeting .NET 9) that uses SQL Server. In this guide
 ---
 
 ## **Step 0: Create an Empty Solution in Visual Studio**
-sadfasdfadsfs
+
 1. **Open Visual Studio 2022 (or later).**
 2. **Create a new project:**
    - Go to **File > New > Project**.
